@@ -1,13 +1,4 @@
-"""Building sensor simulator for the Campus Building Telemetry Platform.
-
-Generates 5-minute readings for a set of zones, with optional injected faults so
-the fault-detection rules (Week 7) can be tested against known ground truth.
-
-Usage:
-    python -m simulator.simulate --start 2026-11-02 --days 1 --out data/readings.parquet
-    python -m simulator.simulate --days 1 --fault B01-Z03:stuck_sensor --out data/readings.csv
-"""
-
+# generates synthetic building sensor data for testing and demo purposes
 from __future__ import annotations
 
 import argparse
@@ -64,7 +55,7 @@ def _outdoor_temp(ts: pd.DatetimeIndex) -> np.ndarray:
 
 
 def _occupied(ts: pd.DatetimeIndex) -> np.ndarray:
-    return (ts.dayofweek < 5) & (ts.hour >= 8) & (ts.hour < 18)
+    return (ts.day_of_week < 5) & (ts.hour >= 8) & (ts.hour < 18)
 
 
 def simulate_zone(

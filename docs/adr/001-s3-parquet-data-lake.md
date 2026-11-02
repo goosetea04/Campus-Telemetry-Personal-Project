@@ -41,7 +41,7 @@ PostgreSQL later (ADR 002).
 
 **Good**
 - Columnar Parquet means Athena reads only the columns and date partitions a query needs.
-  In the Week 1 lab, Parquet was much smaller than the same data as CSV.
+  In the Week 1 lab, Parquet was about 23x smaller than the same data as CSV (see below).
 - Raw data is kept unchanged, so any later step can be rerun from the start.
 - Storage at this volume costs well under USD 1 a month.
 
@@ -49,3 +49,20 @@ PostgreSQL later (ADR 002).
 - Parquet files can't be opened in a text editor; I use pandas or Athena to inspect them.
 - Many small files hurt query speed. Firehose buffering and later compaction keep file counts down.
 - Schema changes need care (tested in Week 6).
+
+## Evidence: Week 1 lab
+
+One week of simulator output (7 days, 30 zones, 60,480 rows), written both ways:
+
+| Format | Size | vs CSV |
+| --- | --- | --- |
+| CSV | 4.15 MB | 1x |
+| Parquet (Snappy), one file | 182 KB | ~23x smaller |
+| Parquet, partitioned by `year/month/day` (7 files) | 266 KB | ~16x smaller |
+
+The partitioned copy is a bit bigger because every file repeats its own schema and
+column statistics. That overhead is the "many small files" trade-off above, at a tiny scale.
+
+Parquet also lets a query skip columns. The `zone_temp_c` column is about 68 KB of the
+182 KB file, so `SELECT avg(zone_temp_c)` reads roughly a third of the file. On CSV,
+Athena would scan all 4.15 MB. Add a one-day partition filter and that drops to about 1/7.

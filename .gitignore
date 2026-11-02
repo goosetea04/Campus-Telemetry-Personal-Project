@@ -1,3 +1,13 @@
 .venv/*
 archive/*
 .DS_Store
+
+# Python
+__pycache__/
+.pytest_cache/
+
+# CDK build output
+infra/cdk.out/
+
+# Generated data (recreate with the simulator)
+data/
