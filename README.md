@@ -32,7 +32,7 @@ ruff check .                    # lint
 ### Generate data
 
 ```bash
-# One healthy day: 3 buildings x 10 zones x 288 readings
+# One healthy day: 3 buildings x (10 zones + 1 meter) x 288 readings
 python -m simulator.simulate --days 1 --out data/readings.parquet
 
 # With injected faults (repeat --fault for more)
@@ -43,8 +43,27 @@ python -m simulator.simulate --days 7 \
   --out data/week.parquet
 ```
 
-Each row is one zone at one 5-minute timestamp. `fault_injected` is the ground-truth
-label the fault rules are tested against later; it would not exist in real building data.
+Each row is one device at one 5-minute timestamp, identified by `building_id` and
+`device_id`. `device_type` says which kind it is, and each kind fills only its own fields
+(the rest are null):
+
+| `device_type` | `device_id` | Fields |
+| --- | --- | --- |
+| `zone` | `zone-01` … | `zone_temp_c`, `setpoint_c`, `co2_ppm`, `heating_valve_pct`, `cooling_valve_pct` |
+| `meter` | `meter-main` | `kw` (average demand over the 5 minutes), `kwh_total` (running meter reading) |
+
+The meter is the building's electricity: base load (higher when occupied) plus the power
+each zone's heating and cooling actually draws, so HVAC faults that waste energy show up there.
+
+`ts` is UTC in ISO 8601 form
+(`2026-11-10T03:05:00Z`); the simulation itself runs on Melbourne time, so a run that
+starts at local midnight begins at 13:00 or 14:00 UTC the day before.
+
+Each run also writes a labels file next to the readings (`data/week.parquet` gives
+`data/week_labels.csv`) with one row per injected fault: `building_id`, `device_id`, `fault`,
+`start_ts`, `end_ts`. Zones not listed are healthy. This is the ground truth the fault rules
+are tested against later. It is kept out of the readings because real sensors don't report
+their own faults, so it never goes to MQTT or the raw bucket.
 
 | Fault | What the simulator does |
 | --- | --- |
