@@ -9,6 +9,8 @@ import numpy as np
 import pandas as pd
 
 FAULT_TYPES = {"stuck_sensor", "simultaneous_heat_cool", "valve_open_cold"}
+MAX_BUILDINGS = 26  # bldg-a .. bldg-z
+MAX_ZONES = 99  # zone-01 .. zone-99
 
 COLUMNS = [
     "timestamp",
@@ -31,25 +33,50 @@ class SimConfig:
     buildings: int = 3
     zones_per_building: int = 10
     seed: int = 42
-    # zone_id -> fault type, e.g. {"B01-Z03": "stuck_sensor"}
+    # "{building_id}/{zone_id}" into fault type, e.g. {"bldg-a/zone-03": "stuck_sensor"}
     faults: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
+        if not 1 <= self.buildings <= MAX_BUILDINGS:
+            raise ValueError(f"buildings must be 1-{MAX_BUILDINGS}, got {self.buildings}")
+        if not 1 <= self.zones_per_building <= MAX_ZONES:
+            raise ValueError(f"zones_per_building must be 1-{MAX_ZONES}, got {self.zones_per_building}")
         bad = {f for f in self.faults.values() if f not in FAULT_TYPES}
         if bad:
             raise ValueError(f"Unknown fault type(s): {bad}. Choose from {FAULT_TYPES}")
+        known = {device_key(b, z) for b, z in zone_ids(self)}
+        missing = set(self.faults) - known
+        if missing:
+            raise ValueError(
+                f"Fault target(s) not in this campus: {sorted(missing)}. Use e.g. 'bldg-a/zone-03'"
+            )
+
+
+def building_id_for(n: int) -> str:
+    """1 -> 'bldg-a'. Lowercase and hyphenated: IDs become S3 folder and column values."""
+    return f"bldg-{chr(ord('a') + n - 1)}"
+
+
+def zone_id_for(n: int) -> str:
+    """7 -> 'zone-07'. Unique within a building only; the key is (building_id, zone_id)."""
+    return f"zone-{n:02d}"
+
+
+def device_key(building: str, zone: str) -> str:
+    """'bldg-a', 'zone-07' -> 'bldg-a/zone-07', the same as the tail of the MQTT topic."""
+    return f"{building}/{zone}"
 
 
 def zone_ids(cfg: SimConfig) -> list[tuple[str, str]]:
     return [
-        (f"B{b:02d}", f"B{b:02d}-Z{z:02d}")
+        (building_id_for(b), zone_id_for(z))
         for b in range(1, cfg.buildings + 1)
         for z in range(1, cfg.zones_per_building + 1)
     ]
 
 
 def _outdoor_temp(ts: pd.DatetimeIndex) -> np.ndarray:
-    """Simple daily cycle: coolest ~5am, warmest ~3pm (Melbourne spring-ish)."""
+    """Simple daily cycle: coolest ~5am, warmest ~3pm try to mimic Melbourne yduring spring."""
     hour = ts.hour + ts.minute / 60
     return 15 + 6 * np.sin((hour - 9) / 24 * 2 * np.pi)
 
@@ -114,7 +141,7 @@ def simulate(cfg: SimConfig) -> pd.DataFrame:
         tz="Australia/Melbourne",
     )
     frames = [
-        simulate_zone(ts, b, z, cfg.faults.get(z), rng) for b, z in zone_ids(cfg)
+        simulate_zone(ts, b, z, cfg.faults.get(device_key(b, z)), rng) for b, z in zone_ids(cfg)
     ]
     return pd.concat(frames, ignore_index=True)[COLUMNS]
 
@@ -134,7 +161,12 @@ def main() -> None:
     p.add_argument("--buildings", type=int, default=3)
     p.add_argument("--zones", type=int, default=10)
     p.add_argument("--seed", type=int, default=42)
-    p.add_argument("--fault", action="append", default=[], help="ZONE_ID:FAULT_TYPE, repeatable")
+    p.add_argument(
+        "--fault",
+        action="append",
+        default=[],
+        help="BUILDING/ZONE:FAULT_TYPE, e.g. bldg-a/zone-03:stuck_sensor (repeatable)",
+    )
     p.add_argument("--out", default="data/readings.parquet")
     args = p.parse_args()
 
@@ -153,7 +185,8 @@ def main() -> None:
         df.to_csv(out, index=False)
     else:
         df.to_parquet(out, index=False)
-    print(f"Wrote {len(df):,} rows for {df.zone_id.nunique()} zones to {out}")
+    zones = df[["building_id", "zone_id"]].drop_duplicates()
+    print(f"Wrote {len(df):,} rows for {len(zones)} zones to {out}")
 
 
 if __name__ == "__main__":

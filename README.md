@@ -37,9 +37,9 @@ python -m simulator.simulate --days 1 --out data/readings.parquet
 
 # With injected faults (repeat --fault for more)
 python -m simulator.simulate --days 7 \
-  --fault B01-Z03:stuck_sensor \
-  --fault B02-Z05:valve_open_cold \
-  --fault B03-Z01:simultaneous_heat_cool \
+  --fault bldg-a/zone-03:stuck_sensor \
+  --fault bldg-b/zone-05:valve_open_cold \
+  --fault bldg-c/zone-01:simultaneous_heat_cool \
   --out data/week.parquet
 ```
 
