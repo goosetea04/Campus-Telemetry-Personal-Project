@@ -26,4 +26,4 @@ jobs:
 
       - name: CDK stack tests
         working-directory: infra
-        run: pytest test_storage_stack.py
+        run: pytest test_*.py
