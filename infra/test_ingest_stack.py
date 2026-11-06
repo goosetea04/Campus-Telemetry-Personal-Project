@@ -1,7 +1,12 @@
+import json
+from pathlib import Path
+
 import aws_cdk as cdk
 from aws_cdk.assertions import Template
 
 from stacks.ingest_stack import IngestStack
+
+SCHEMA = json.loads((Path(__file__).parents[1] / "schema" / "telemetry.json").read_text())
 
 
 def rule_payload() -> dict:
@@ -15,10 +20,12 @@ def test_rule_listens_to_all_campus_devices():
     assert "FROM 'campus/+/+'" in rule_payload()["Sql"]
 
 
-def test_rule_adds_ids_from_topic():
+def test_rule_adds_every_column_the_schema_says_comes_from_the_topic():
     sql = rule_payload()["Sql"]
-    assert "topic(2) AS building_id" in sql
-    assert "topic(3) AS device_id" in sql
+    topic_cols = [c for c in SCHEMA["columns"] if c["source"] == "topic"]
+    assert topic_cols
+    for col in topic_cols:
+        assert f"topic({col['topic_segment']}) AS {col['name']}" in sql
 
 
 def test_rule_uses_current_sql_version_and_has_error_action():

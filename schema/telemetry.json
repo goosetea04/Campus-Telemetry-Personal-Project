@@ -1,0 +1,86 @@
+{
+  "table": "telemetry",
+  "description": "One row per device per 5-minute reading. Zone and meter rows share the table; each leaves the other device type's fields null.",
+  "types_note": "Types are Glue/Hive names. Every reading is double, so JSON 640 and 640.0 both load into it, while an int column would reject 21.4.",
+  "columns": [
+    {
+      "name": "ts",
+      "type": "string",
+      "source": "payload",
+      "devices": ["zone", "meter"],
+      "comment": "Reading time in UTC, ISO 8601, e.g. 2026-11-10T03:05:00Z. Kept as text in raw; cast to timestamp in curated."
+    },
+    {
+      "name": "device_type",
+      "type": "string",
+      "source": "payload",
+      "devices": ["zone", "meter"],
+      "comment": "zone or meter"
+    },
+    {
+      "name": "building_id",
+      "type": "string",
+      "source": "topic",
+      "topic_segment": 2,
+      "devices": ["zone", "meter"],
+      "comment": "Added by the IoT rule from campus/{building}/{device}, e.g. bldg-a"
+    },
+    {
+      "name": "device_id",
+      "type": "string",
+      "source": "topic",
+      "topic_segment": 3,
+      "devices": ["zone", "meter"],
+      "comment": "Added by the IoT rule from campus/{building}/{device}, e.g. zone-07 or meter-main"
+    },
+    {
+      "name": "zone_temp_c",
+      "type": "double",
+      "source": "payload",
+      "devices": ["zone"],
+      "comment": "Zone air temperature, degrees C"
+    },
+    {
+      "name": "setpoint_c",
+      "type": "double",
+      "source": "payload",
+      "devices": ["zone"],
+      "comment": "Temperature the controller is aiming for, degrees C"
+    },
+    {
+      "name": "co2_ppm",
+      "type": "double",
+      "source": "payload",
+      "devices": ["zone"],
+      "comment": "CO2 concentration, parts per million"
+    },
+    {
+      "name": "heating_valve_pct",
+      "type": "double",
+      "source": "payload",
+      "devices": ["zone"],
+      "comment": "Heating valve position as reported by the controller, 0-100"
+    },
+    {
+      "name": "cooling_valve_pct",
+      "type": "double",
+      "source": "payload",
+      "devices": ["zone"],
+      "comment": "Cooling valve position as reported by the controller, 0-100"
+    },
+    {
+      "name": "kw",
+      "type": "double",
+      "source": "payload",
+      "devices": ["meter"],
+      "comment": "Average electrical demand over the 5 minutes ending at ts, kW"
+    },
+    {
+      "name": "kwh_total",
+      "type": "double",
+      "source": "payload",
+      "devices": ["meter"],
+      "comment": "Cumulative meter reading at ts, kWh; never decreases"
+    }
+  ]
+}

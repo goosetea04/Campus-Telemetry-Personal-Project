@@ -10,6 +10,7 @@ alongside the AWS Certified Data Engineer – Associate exam.
 
 | Folder | Contents |
 | --- | --- |
+| `schema/` | `telemetry.json`: column names, types and sources for the telemetry table |
 | `simulator/` | Python sensor simulator with fault injection |
 | `infra/` | AWS CDK (Python) stacks |
 | `etl/` | Glue jobs (from Week 3) |
