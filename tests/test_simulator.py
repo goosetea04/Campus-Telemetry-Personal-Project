@@ -1,3 +1,5 @@
+import json
+import re
 import sys
 
 import numpy as np
@@ -17,6 +19,8 @@ from simulator.simulate import (
     labels_path,
     main,
     simulate,
+    to_message,
+    topic_for,
 )
 
 
@@ -229,6 +233,59 @@ def test_unknown_fault_target_rejected(target):
 def test_campus_size_limited_by_id_format(kwargs):
     with pytest.raises(ValueError):
         SimConfig(**kwargs)
+
+
+# --- MQTT topics and messages --------------------------------------------------------------
+
+
+def test_topic_for_builds_campus_topic():
+    assert topic_for("bldg-a", "zone-07") == "campus/bldg-a/zone-07"
+    assert topic_for("bldg-a", METER_ID) == "campus/bldg-a/meter-main"
+
+
+def test_every_device_gets_a_well_formed_topic(healthy):
+    pattern = re.compile(r"campus/bldg-[a-z]/(zone-\d{2}|meter-main)")
+    devices = healthy.drop_duplicates(["building_id", "device_id"])
+    topics = [topic_for(b, d) for b, d in zip(devices.building_id, devices.device_id, strict=True)]
+    assert all(pattern.fullmatch(t) for t in topics)
+    assert len(set(topics)) == 8  # one topic per device
+
+
+@pytest.mark.parametrize("bad", ["", "bldg/a", "bldg-+", "bldg-#"])
+def test_topic_for_rejects_segments_that_break_mqtt(bad):
+    with pytest.raises(ValueError):
+        topic_for(bad, "zone-01")
+    with pytest.raises(ValueError):
+        topic_for("bldg-a", bad)
+
+
+def test_zone_message_carries_only_zone_fields(healthy):
+    msg = to_message(zones(healthy).iloc[0])
+    assert list(msg) == ["ts", "device_type", *ZONE_FIELDS]
+    assert msg["device_type"] == "zone"
+
+
+def test_meter_message_carries_only_meter_fields(healthy):
+    msg = to_message(meters(healthy).iloc[0])
+    assert list(msg) == ["ts", "device_type", *METER_FIELDS]
+    assert msg["device_type"] == "meter"
+
+
+def test_message_is_flat_json(healthy):
+    for _, row in healthy.iloc[[0, -1]].iterrows():
+        text = json.dumps(to_message(row))
+        decoded = json.loads(text)
+        assert all(isinstance(v, (str, int, float)) for v in decoded.values())
+        assert "null" not in text and "NaN" not in text
+
+
+def test_message_plus_topic_rebuilds_the_row(healthy):
+    # What the IoT rule does: SELECT *, topic(2) AS building_id, topic(3) AS device_id
+    for _, row in healthy.iloc[[0, -1]].iterrows():
+        topic = topic_for(row.building_id, row.device_id)
+        _, building, device = topic.split("/")
+        record = {**json.loads(json.dumps(to_message(row))), "building_id": building, "device_id": device}
+        assert record == row.dropna().to_dict()
 
 
 # --- CLI -----------------------------------------------------------------------------------

@@ -7,7 +7,7 @@ import pyarrow as pa
 import pyarrow.parquet as pq
 import pytest
 
-from simulator.simulate import COLUMNS, METER_FIELDS, ZONE_FIELDS, SimConfig, simulate
+from simulator.simulate import COLUMNS, METER_FIELDS, PAYLOAD_FIELDS, ZONE_FIELDS, SimConfig, simulate
 
 SCHEMA = json.loads((Path(__file__).parents[1] / "schema" / "telemetry.json").read_text())
 COLS = SCHEMA["columns"]
@@ -37,6 +37,10 @@ def test_every_reading_is_double():
 def test_topic_columns_name_their_segment():
     topic_cols = [c for c in COLS if c["source"] == "topic"]
     assert [(c["name"], c["topic_segment"]) for c in topic_cols] == [("building_id", 2), ("device_id", 3)]
+
+
+def test_message_payload_is_every_non_topic_column():
+    assert names(lambda c: c["source"] == "payload") == PAYLOAD_FIELDS
 
 
 def test_every_column_is_documented():

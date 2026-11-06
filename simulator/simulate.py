@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -31,6 +32,11 @@ KW_PER_VALVE_PCT = 0.05  # one zone at 100% heating or cooling draws 5 kW
 ZONE_FIELDS = ["zone_temp_c", "setpoint_c", "co2_ppm", "heating_valve_pct", "cooling_valve_pct"]
 METER_FIELDS = ["kw", "kwh_total"]
 COLUMNS = ["ts", "device_type", "building_id", "device_id", *ZONE_FIELDS, *METER_FIELDS]
+
+# MQTT: each device publishes to campus/{building_id}/{device_id}. The IDs travel in the topic,
+# so the payload carries everything else; the IoT rule adds the IDs back from the topic.
+TOPIC_PREFIX = "campus"
+PAYLOAD_FIELDS = ["ts", "device_type", *ZONE_FIELDS, *METER_FIELDS]
 
 # Ground truth for testing the fault rules. Real sensors don't report their own faults, so this
 # never goes into the readings or MQTT messages; the simulator writes it to a separate file.
@@ -219,6 +225,24 @@ def fault_labels(cfg: SimConfig) -> pd.DataFrame:
 def labels_path(readings_path: Path) -> Path:
     """data/week.parquet -> data/week_labels.csv"""
     return readings_path.with_name(f"{readings_path.stem}_labels.csv")
+
+
+def topic_for(building_id: str, device_id: str) -> str:
+    """'bldg-a', 'zone-07' -> 'campus/bldg-a/zone-07'."""
+    for segment in (building_id, device_id):
+        # '/' would add a topic level; '+' and '#' are MQTT wildcards and can't be published to.
+        if not segment or any(ch in segment for ch in "/+#"):
+            raise ValueError(f"Invalid topic segment: {segment!r}")
+    return f"{TOPIC_PREFIX}/{device_key(building_id, device_id)}"
+
+
+def to_message(row: Mapping[str, object]) -> dict[str, object]:
+    """One reading -> the flat JSON payload its device publishes.
+
+    Leaves out building_id and device_id (they're in the topic) and any field the device
+    doesn't report, so a meter message has no zone fields at all rather than nulls.
+    """
+    return {k: row[k] for k in PAYLOAD_FIELDS if not pd.isna(row[k])}
 
 
 def _parse_faults(items: list[str]) -> dict[str, str]:
